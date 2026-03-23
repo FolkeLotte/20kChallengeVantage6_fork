@@ -17,6 +17,7 @@ Set these values for your machine:
 ```bash
 export WORKDIR="<ABS_PATH_TO_WORKDIR>"                    # e.g. $HOME/code
 export PYTHON_INTERPRETER="<PYTHON_3_12_EXECUTABLE>"      # e.g. python3.12
+export REGISTRY_PORT="${REGISTRY_PORT:-5001}"             # on macOS use 5001 or 50000
 ```
 
 ## 2. Clone repos
@@ -41,16 +42,17 @@ git checkout 3f4719051cb189e65cb7ef6e90ffff3190b4bda9
 export INFRA_DIR="$WORKDIR/v6-infrastructure-sh/infrastructure"
 export CHALLENGE_DIR="$WORKDIR/20kChallengeVantage6"
 export ALGO_DIR="$CHALLENGE_DIR/my-fl-project/20kLogRegChallenge"
+export ALGO_IMAGE="localhost:${REGISTRY_PORT}/20klogregchallenge:dev"
 ```
 
 ## 4. Start local registry + build/push algorithm image
 
 ```bash
-docker run -d --restart unless-stopped -p 5000:5000 --name v6-local-registry registry:2 || true
+docker run -d --restart unless-stopped -p "${REGISTRY_PORT}:5000" --name v6-local-registry registry:2 || true
 
 cd "$ALGO_DIR"
-docker build -t localhost:5000/20klogregchallenge:dev .
-docker push localhost:5000/20klogregchallenge:dev
+docker build -t "$ALGO_IMAGE" .
+docker push "$ALGO_IMAGE"
 ```
 
 ## 5. Create node config with placeholders resolved from env vars
@@ -121,11 +123,13 @@ Run from `"$ALGO_DIR"` with `.venv` active:
 ```bash
 python - <<'PY'
 import time
+import os
 from vantage6.client import Client
 
 client = Client("http://localhost", 5070, "/api")
 client.authenticate("gamma-user", "gamma-password")
 client.setup_encryption(None)
+image = os.getenv("ALGO_IMAGE", "localhost:5001/20klogregchallenge:dev")
 
 collab_id = client.collaboration.list()["data"][0]["id"]
 org_ids = [o["id"] for o in client.organization.list(collaboration=collab_id)["data"]]
@@ -134,7 +138,7 @@ task = client.task.create(
     collaboration=collab_id,
     organizations=[org_ids[0]],
     name="20k challenge ADMM short smoke",
-    image="localhost:5000/20klogregchallenge:dev",
+    image=image,
     description="short smoke run",
     input_={
         "method": "central_function",
