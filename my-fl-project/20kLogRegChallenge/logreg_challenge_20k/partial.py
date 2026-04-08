@@ -360,16 +360,16 @@ def collect_predictions(
     logging: bool,
 ) -> Dict[str, Any]:
     """
-    Return predictions and outcomes (train + val) for the final global model.
+    Return predictions and outcomes (val only) for the final global model.
 
     This is used by the central function after convergence to compute
-    ROC/AUC and calibration metrics in a way analogous to the standalone
-    local simulation.
+    ROC/AUC and calibration metrics on the held-out validation set only
+    (years >= 2012), consistent with compare_models.py and ADMM_Local.py.
     """
     X_train, y_train, X_val, y_val = _preprocess_local_dataframe(df1,logging)
 
-    X_all = np.vstack([X_train, X_val])
-    y_all = np.concatenate([y_train, y_val])
+    X_all = X_val
+    y_all = y_val
 
     z_arr = np.asarray(z, dtype=float).reshape(-1)
     probs_all = _predict_proba(X_all, z_arr)

@@ -497,7 +497,7 @@ def central_function(
             input_=input_,
             organizations=[org_id],
             name="Collect predictions for ROC/calibration",
-            description="Return y and predicted probabilities (train+val)",
+            description="Return y and predicted probabilities (val only)",
         )
         pred_tasks.append(task)
 

@@ -450,8 +450,8 @@ def record_admm_metrics(nodes: List[LocalNode], instance: InstanceState, history
 
 def evaluate_final_model(nodes: List[LocalNode]) -> Tuple[List[dict], dict, dict]:
     """
-    Compute ROC/AUC per sitpyenv e, global ROC/AUC, and calibration metrics on
-    all patients (train + val).
+    Compute ROC/AUC per site, global ROC/AUC, and calibration metrics on
+    val patients only (years >= 2012).
     """
 
     all_y = []
@@ -461,8 +461,8 @@ def evaluate_final_model(nodes: List[LocalNode]) -> Tuple[List[dict], dict, dict
     for i, node in enumerate(nodes):
         z_global = node.state.z
 
-        X_all = np.vstack([node.data.X_train, node.data.X_val])
-        y_all = np.concatenate([node.data.y_train, node.data.y_val])
+        X_all = node.data.X_val
+        y_all = node.data.y_val
 
         probs_all = predict_proba(X_all, z_global)
         fpr, tpr, _ = roc_curve(y_all, probs_all)
@@ -702,15 +702,37 @@ def plot_calibration_curve(calibration: dict):
 # ==============================================================================
 
 def run_local_simulation(
-        csv_paths: List[str], 
-        num_rounds = 300, 
-        rho = 0.25, 
-        alpha = 1.6, 
-        lambda_ = 0, 
-        abs_tol = 1e-4, 
-        rel_tol  = 1e-4
+        csv_paths: List[str],
+        num_rounds = 300,
+        rho = 0.25,
+        alpha = 1.6,
+        lambda_ = 0,
+        abs_tol = 1e-4,
+        rel_tol  = 1e-4,
+        full_dataset_validation: bool = False,
+        global_val_csv: Optional[str] = None,
         ):
+    """
+    full_dataset_validation: if True, each site is evaluated on its own train+val
+    combined each round instead of val-only.
+    global_val_csv: if provided, every site is evaluated each round against the
+    val split (years >= 2012) from this single pooled CSV — equivalent to
+    extracting the val split from fakebeach_merged_FULL.csv and testing it on
+    every site. Takes precedence over full_dataset_validation if both are set.
+    """
     print(f"--- Loading data from {len(csv_paths)} files ---")
+
+    # --- Load shared global val set if requested ---
+    X_global_val: Optional[np.ndarray] = None
+    y_global_val: Optional[np.ndarray] = None
+    if global_val_csv is not None:
+        print(f"  [Mode: global val set from {global_val_csv}]")
+        _gld, _ = load_local_patient_data(global_val_csv)
+        X_global_val = _gld.X_val
+        y_global_val = _gld.y_val
+        print(f"  Global val set: {len(y_global_val)} patients")
+    elif full_dataset_validation:
+        print("  [Mode: full-dataset validation (train + val) per site]")
 
     history = {
         "round": [],
@@ -787,24 +809,44 @@ def run_local_simulation(
         # D. Validation Metrics (Global Model on each Node Val Set)
         val_acc_per_node = []
         val_sse_per_node = []
+        z_global = nodes[0].state.z  # consensus z, same on all nodes
 
-        for i, node in enumerate(nodes):
-            z_global = node.state.z  # same global z on all nodes
-            val_probs = predict_proba(node.data.X_val, z_global)
-            val_preds = (val_probs >= 0.5).astype(int)
+        if X_global_val is not None:
+            # Same shared val set tested on every site
+            gv_probs = predict_proba(X_global_val, z_global)
+            gv_preds = (gv_probs >= 0.5).astype(int)
+            gv_acc = float(np.mean(gv_preds == y_global_val))
+            gv_sse = float(np.sum((y_global_val - gv_probs) ** 2))
+            for i in range(len(nodes)):
+                val_acc_per_node.append(gv_acc)
+                val_sse_per_node.append(gv_sse)
+                print(f"Node {i:02d} | Global Val Accuracy: {gv_acc:.4f}")
+            total_val_patients = len(y_global_val)
+        else:
+            for i, node in enumerate(nodes):
+                if full_dataset_validation:
+                    X_eval = np.vstack([node.data.X_train, node.data.X_val])
+                    y_eval = np.concatenate([node.data.y_train, node.data.y_val])
+                    label = "Full Accuracy"
+                else:
+                    X_eval = node.data.X_val
+                    y_eval = node.data.y_val
+                    label = "Val Accuracy"
 
-            val_acc_i = np.mean(val_preds == node.data.y_val)
-            val_acc_per_node.append(val_acc_i)
+                val_probs = predict_proba(X_eval, z_global)
+                val_preds = (val_probs >= 0.5).astype(int)
+                val_acc_i = float(np.mean(val_preds == y_eval))
+                val_acc_per_node.append(val_acc_i)
+                val_sse_per_node.append(float(np.sum((y_eval - val_probs) ** 2)))
+                print(f"Node {i:02d} | {label}: {val_acc_i:.4f}")
 
-            # Validation SSE (for RMSE, like stageEvaluation.m)
-            val_residuals = node.data.y_val - val_probs
-            val_sse_i = float(np.sum(val_residuals ** 2))
-            val_sse_per_node.append(val_sse_i)
+            total_val_patients = sum(
+                len(node.data.y_train) + len(node.data.y_val) if full_dataset_validation
+                else len(node.data.y_val)
+                for node in nodes
+            )
 
-            print(f"Node {i:02d} | Val Accuracy: {val_acc_i:.4f}")
-
-        # --- Global validation RMSE   ---
-        total_val_patients = sum(len(node.data.y_val) for node in nodes)
+        # --- Global RMSE ---
         total_val_sse = float(np.sum(val_sse_per_node))
         val_rmse_global = float(np.sqrt(total_val_sse / total_val_patients))
 
@@ -819,9 +861,10 @@ def run_local_simulation(
         mean_val_acc = float(np.mean(val_acc_per_node))
         history["val_acc_mean"].append(mean_val_acc)
 
+        acc_label = "global val acc" if X_global_val is not None else ("full acc" if full_dataset_validation else "val acc")
         print(
-            f"Round {r:03d}: mean acc={mean_val_acc:.4f}, "
-            f"val RMSE={val_rmse_global:.4f} | "
+            f"Round {r:03d}: mean {acc_label}={mean_val_acc:.4f}, "
+            f"RMSE={val_rmse_global:.4f} | "
             f"r_norm={r_norm:.4f} (eps={eps_pri:.4f}) | "
             f"s_norm={s_norm:.4f} (eps={eps_dual:.4f})"
         )
@@ -869,19 +912,21 @@ def run_local_simulation(
 
 if __name__ == "__main__":
     my_csv_paths = [
-        "20kLogRegChallenge/test/fakebeach_merged_0.csv",
-        "20kLogRegChallenge/test/fakebeach_merged_1.csv",
-        "20kLogRegChallenge/test/fakebeach_merged_2.csv"
+        "/Users/palan001/Desktop/Health-AI/Beach - Eerste opdracht/Ivan_Code/Code/my-fl-project/20kLogRegChallenge/test/fakebeach_merged_0.csv",
+        "/Users/palan001/Desktop/Health-AI/Beach - Eerste opdracht/Ivan_Code/Code/my-fl-project/20kLogRegChallenge/test/fakebeach_merged_1.csv",
+        "/Users/palan001/Desktop/Health-AI/Beach - Eerste opdracht/Ivan_Code/Code/my-fl-project/20kLogRegChallenge/test/fakebeach_merged_2.csv"
     ]
 
     # Run
     # run_local_simulation(my_csv_paths, num_rounds=100)
     run_local_simulation(
-        my_csv_paths, 
-        num_rounds = 400, 
-        rho = 0.25, 
-        alpha = 1, 
-        lambda_ = 0, 
-        abs_tol = 0.001, 
-        rel_tol  = 0.001
+        my_csv_paths,
+        num_rounds = 10000,
+        rho = 0.015,
+        alpha = 1.6,
+        lambda_ = 0,
+        abs_tol = 1e-12,
+        rel_tol  = 1e-12,
+        full_dataset_validation=False,  # True: each site evaluated on its own train+val
+        global_val_csv=None,            # e.g. ".../fakebeach_merged_FULL.csv" — val split tested on every site
         )
