@@ -53,12 +53,85 @@ FEATURE_COLUMNS = (
 )
 OUTCOME_COLUMN = "SurvivalStatus"
 
-EXPECTED_CATEGORIES = {
-    "patient_t_stage": ["Tx","Tis","T0","T1","T1mi","T1a","T1b","T1c","T2","T2a","T2b","T3","T4"],
-    "patient_n_stage": ["Nx","N0","N1","N2","N3"],
-    "patient_m_stage": ["Mx","M0","M1","M1a","M1b","M1c"],
-    "patient_overall_stage": ["0","Occult","I","IA","IA1","IA2","IA3","IB","II","IIA","IIB","III","IIIA","IIIB","IIIC","IV","IVA","IVB","x"],
+# Collapse synonymous stage labels to bucket ids before K-1 dummies (same id -> same column).
+T_MAP = {
+    "T0": 0,
+    "T1": 1,
+    "T1a": 1,
+    "T1b": 1,
+    "T1c": 1,
+    "T1mi": 1,
+    "Tis": 1,
+    "T2": 2,
+    "T2a": 2,
+    "T2b": 2,
+    "T3": 3,
+    "T4": 4,
+    "Tx": 5,
 }
+N_MAP = {"N0": 0, "N1": 1, "N2": 2, "N3": 3, "Nx": 4}
+M_MAP = {"M0": 0, "M1": 1, "M1a": 1, "M1b": 1, "M1c": 1, "Mx": 2}
+S_MAP = {
+    "0": 0,
+    "I": 1,
+    "IA": 1,
+    "IA1": 1,
+    "IA2": 1,
+    "IA3": 1,
+    "IB": 1,
+    "II": 2,
+    "IIA": 2,
+    "IIB": 2,
+    "III": 3,
+    "IIIA": 3,
+    "IIIB": 3,
+    "IIIC": 3,
+    "IV": 4,
+    "IVA": 4,
+    "IVB": 4,
+    "Occult": 5,
+    "x": 5,
+}
+
+
+def _map_tnm(series: pd.Series, mmap: dict) -> pd.Series:
+    s = series.astype(str).str.strip()
+    s = s.mask(s.str.lower() == "nan", np.nan)
+    return s.map(mmap)
+
+
+def _map_overall(series: pd.Series) -> pd.Series:
+    num = pd.to_numeric(series, errors="coerce")
+    str_stripped = series.astype(str).str.strip()
+    str_stripped = str_stripped.mask(str_stripped.str.lower() == "nan", np.nan)
+    is_whole = num.notna() & (num == np.floor(num))
+    keys = pd.Series(index=series.index, dtype=object)
+    keys.loc[series.isna()] = np.nan
+    keys.loc[is_whole & series.notna()] = num.loc[is_whole & series.notna()].astype(int).astype(str)
+    keys.loc[~is_whole & series.notna()] = str_stripped.loc[~is_whole & series.notna()]
+    return keys.map(S_MAP)
+
+
+def _prepare_stage_columns_for_dummies(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    out["patient_t_stage"] = _map_tnm(out["patient_t_stage"], T_MAP)
+    out["patient_n_stage"] = _map_tnm(out["patient_n_stage"], N_MAP)
+    out["patient_m_stage"] = _map_tnm(out["patient_m_stage"], M_MAP)
+    out["patient_overall_stage"] = _map_overall(out["patient_overall_stage"])
+    out["patient_t_stage"] = pd.Categorical(
+        out["patient_t_stage"], categories=sorted(set(T_MAP.values()))
+    )
+    out["patient_n_stage"] = pd.Categorical(
+        out["patient_n_stage"], categories=sorted(set(N_MAP.values()))
+    )
+    out["patient_m_stage"] = pd.Categorical(
+        out["patient_m_stage"], categories=sorted(set(M_MAP.values()))
+    )
+    out["patient_overall_stage"] = pd.Categorical(
+        out["patient_overall_stage"], categories=sorted(set(S_MAP.values()))
+    )
+    return out
+
 
 def _compute_two_year_survival(
     vital_status: pd.Series, days_until_last_visit: pd.Series
@@ -126,11 +199,8 @@ def _preprocess_local_dataframe(
     # print(f"Number of alive: {num_alive}")
     # print(f"Number of censored/unknown (NaN): {num_nan}")
 
-    # 2. Apply fixed category sets to the four stage features
-    for col in FEATURE_COLUMNS:
-        # if col not in df.columns:
-        #     raise ValueError(f"Expected feature column '{col}' not found in input data")
-        df[col] = pd.Categorical(df[col], categories=EXPECTED_CATEGORIES[col])
+    # 2. Bucket synonymous stage labels, then fixed categorical levels for K-1 dummies
+    df = _prepare_stage_columns_for_dummies(df)
 
     # 3. Ensure diagnosis year is present for time-based split
     if "year_of_diagnosis" not in df.columns:
