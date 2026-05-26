@@ -982,10 +982,12 @@ def run_local_simulation(
 # ==============================================================================
 
 if __name__ == "__main__":
+    repo_root = Path(__file__).resolve().parent.parent
+    test_data_dir = repo_root / "my-fl-project" / "20kLogRegChallenge" / "test"
     my_csv_paths = [
-        "/Users/palan001/Desktop/Health-AI/Beach - Eerste opdracht/Ivan_Code/Code/my-fl-project/20kLogRegChallenge/test/fakebeach_merged_0.csv",
-        "/Users/palan001/Desktop/Health-AI/Beach - Eerste opdracht/Ivan_Code/Code/my-fl-project/20kLogRegChallenge/test/fakebeach_merged_1.csv",
-        "/Users/palan001/Desktop/Health-AI/Beach - Eerste opdracht/Ivan_Code/Code/my-fl-project/20kLogRegChallenge/test/fakebeach_merged_2.csv"
+        str(test_data_dir / "fakebeach_merged_0.csv"),
+        str(test_data_dir / "fakebeach_merged_1.csv"),
+        str(test_data_dir / "fakebeach_merged_2.csv"),
     ]
 
     # Run

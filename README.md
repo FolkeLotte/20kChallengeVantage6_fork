@@ -46,9 +46,11 @@ See the **wiki** linked from the [20kChallenge README](https://github.com/Radiat
 **Python packages** (install in your environment, e.g. `v6-workshop`):
 
 ```bash
-pip install numpy pandas scipy scikit-learn matplotlib torch
-pip install vantage6-client vantage6-algorithm-tools
+pip install -r requirements.local.txt
 ```
+
+The `requirements.local.txt` file is a consolidated dependency list for local
+execution across the main scripts in this repository.
 
 **Data files** (must exist):
 
@@ -134,7 +136,7 @@ python -m test.MockClient
 **Requirements:**
 
 - numpy, pandas, scipy, scikit-learn, matplotlib
-- CSV paths set in the `__main__` section (see below)
+- Uses repository-relative default CSV paths in `20kLogRegChallenge/test/`
 
 **How to run:**
 
@@ -149,7 +151,7 @@ Or with full path:
 python "/path/to/local_simulation/ADMM_Local.py"
 ```
 
-**Configuring CSV paths:** Edit the `my_csv_paths` list at the bottom of `ADMM_Local.py`:
+**Configuring CSV paths (optional):** Defaults are already set to the repository test CSVs. Edit only if you want custom datasets:
 
 ```python
 if __name__ == "__main__":

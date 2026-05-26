@@ -1,0 +1,17 @@
+# Consolidated dependencies for local development and execution.
+# Covers:
+# - local_simulation/ADMM_Local.py
+# - local_simulation/compare_models.py
+# - my-fl-project/LocalLogReg.py
+# - my-fl-project/20kLogRegChallenge/test/MockClient.py
+# - my-fl-project/20kLogRegChallenge/run_on_v6_network.py
+
+numpy
+pandas
+scipy
+scikit-learn
+matplotlib
+torch
+vantage6-client
+vantage6-tools
+vantage6-algorithm-tools

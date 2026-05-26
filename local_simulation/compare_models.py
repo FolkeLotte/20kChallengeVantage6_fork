@@ -360,15 +360,15 @@ def compare_models(
 # ==============================================================================
 
 if __name__ == "__main__":
-    _BASE = (
-        "/Users/palan001/Desktop/Health-AI/Beach - Eerste opdracht/Ivan_Code/Code"
-        "/my-fl-project/20kLogRegChallenge/test"
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    test_data_dir = os.path.join(
+        repo_root, "my-fl-project", "20kLogRegChallenge", "test"
     )
-    FULL_CSV = f"{_BASE}/fakebeach_merged_FULL.csv"
+    FULL_CSV = os.path.join(test_data_dir, "fakebeach_merged_FULL.csv")
     SITE_CSVS = [
-        f"{_BASE}/fakebeach_merged_0.csv",
-        f"{_BASE}/fakebeach_merged_1.csv",
-        f"{_BASE}/fakebeach_merged_2.csv",
+        os.path.join(test_data_dir, "fakebeach_merged_0.csv"),
+        os.path.join(test_data_dir, "fakebeach_merged_1.csv"),
+        os.path.join(test_data_dir, "fakebeach_merged_2.csv"),
     ]
 
     # -------------------------------------------------------------------------
