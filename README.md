@@ -2,6 +2,10 @@
 
 This guide explains how to run each of the four main scripts in the project.
 
+## Additional documentation
+
+- [Orchestration with vantage6](docs/orchestration_vantage6.md)
+
 ---
 
 ## Reference (basis of this code)

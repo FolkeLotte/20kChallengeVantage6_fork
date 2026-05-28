@@ -5,8 +5,9 @@ This directory contains first-pass documentation extracted from the codebase.
 ## Contents
 
 - [Architecture overview](architecture.md)
+- [Orchestration with vantage6](orchestration_vantage6.md)
 - [API reference (verbatim docstrings)](api.md)
-- [Diagram](../central_function_flow.png)
+- [Diagram](central_function_flow.png)
 
 ## Source of truth
 
