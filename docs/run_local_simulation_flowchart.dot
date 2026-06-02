@@ -1,0 +1,49 @@
+digraph RunLocalSimulation {
+  graph [rankdir=TB, bgcolor="white", pad="0.2", nodesep="0.35", ranksep="0.45", splines=ortho, fontname="Helvetica"];
+  node [shape=box, style="rounded,filled", fillcolor="#eef6ff", color="#1f4e79", fontname="Helvetica", fontsize=10, margin="0.08,0.06"];
+  edge [color="#333333", arrowsize=0.7, penwidth=1.2, fontname="Helvetica", fontsize=9];
+
+  start [label="Start run_local_simulation\n(csv_paths, ADMM hyperparameters, eval flags)", fillcolor="#dff4e5", color="#1b7f3a"];
+  mode [label="Mode setup:\n- if global_val_csv: load pooled validation split\n- else optional full_dataset_validation"];
+  hist [label="Initialize history dict\n(round metrics, residuals, RMSE, final ROC/calibration)"];
+  load [label="Load each CSV via load_local_patient_data()\n(preprocess, encode features, train/val split)"];
+  bad_data [label="Load error or no local data?", shape=diamond, fillcolor="#fff7db", color="#8a6d1f"];
+  exit [label="Print error / no data and return", fillcolor="#fff0f0", color="#9c2f2f"];
+
+  init [label="Initialize ADMM state\npatient_counts, feature_dim(+1 intercept),\nInstanceState, LocalNode list"];
+  loop [label="For round r = 1..num_rounds", fillcolor="#e9f2ff"];
+
+  x_step [label="A) Local X updates\nfor each node: admm_x_update(node, instance)"];
+  zu_step [label="B) Global aggregation\nadmm_z_u_update(nodes, instance)"];
+  conv [label="C) Convergence stats\nr_norm, s_norm, eps_pri, eps_dual = check_convergence(...)"];
+
+  eval_mode [label="D) Evaluation branch", shape=diamond, fillcolor="#fff7db", color="#8a6d1f"];
+  eval_global [label="If global_val_csv:\nEvaluate same shared val set\nfor every node", fillcolor="#f7fbff"];
+  eval_local [label="Else per node:\n- full_dataset_validation? train+val\n- otherwise val-only", fillcolor="#f7fbff"];
+
+  rmse [label="Compute global validation RMSE\nfrom total validation SSE and total validation patients"];
+  log [label="Append round logs to history\n(record_admm_metrics + print summary)"];
+
+  stop [label="Converged?\n(r_norm < eps_pri AND s_norm < eps_dual)", shape=diamond, fillcolor="#fff7db", color="#8a6d1f"];
+
+  post1 [label="Post-loop:\nplot_admm_convergence()\nplot_training_progress()", fillcolor="#f0f8ff", color="#24557a"];
+  post2 [label="Final metrics:\nroc_site, roc_global, calibration\n= evaluate_final_model(nodes)", fillcolor="#f0f8ff", color="#24557a"];
+  post3 [label="Store final metrics in history\nplot ROC + calibration\nprint final coefficients", fillcolor="#f0f8ff", color="#24557a"];
+  end [label="End", shape=oval, fillcolor="#dff4e5", color="#1b7f3a"];
+
+  start -> mode -> hist -> load -> bad_data;
+  bad_data -> exit [label="Yes"];
+  bad_data -> init [label="No"];
+
+  init -> loop -> x_step -> zu_step -> conv -> eval_mode;
+  eval_mode -> eval_global [label="global_val_csv set"];
+  eval_mode -> eval_local [label="otherwise"];
+  eval_global -> rmse;
+  eval_local -> rmse;
+
+  rmse -> log -> stop;
+  stop -> x_step [label="No (next round)"];
+  stop -> post1 [label="Yes"];
+
+  post1 -> post2 -> post3 -> end;
+}
